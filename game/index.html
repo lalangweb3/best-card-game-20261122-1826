@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inkbound Duel — a duel of living ink cards</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #171208 radial-gradient(ellipse at 50% 0%, #2b2113 0%, #171208 60%, #0d0a06 100%);
+    color: #e8dcc0; font-family: Georgia, 'Times New Roman', serif;
+    overflow: hidden; user-select: none;
+  }
+  #app { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+  .bar { display: flex; align-items: center; gap: 14px; padding: 10px 22px; }
+  .name { font-size: 20px; letter-spacing: 1px; color: #f3e6c8; white-space: nowrap; }
+  .name small { display: block; font-size: 12px; color: #b39d6b; letter-spacing: 2px; text-transform: uppercase; }
+  .lifewrap { flex: 1; max-width: 520px; }
+  .lifebar { height: 18px; background: #0a0703; border: 1px solid #6b5732; border-radius: 9px; overflow: hidden; }
+  .lifefill { height: 100%; transition: width .35s ease; }
+  .lifefill.you { background: linear-gradient(90deg, #7fb069, #a7c957); }
+  .lifefill.foe { background: linear-gradient(90deg, #c0392b, #e74c3c); }
+  .lifetext { font-size: 15px; color: #f3e6c8; margin-top: 3px; }
+  .shield { color: #8ecae6; font-weight: bold; }
+  .inkpips { display: flex; gap: 5px; align-items: center; }
+  .pip { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #6b5732; background: #0a0703; }
+  .pip.full { background: radial-gradient(circle at 35% 35%, #ffe08a, #c98f1b); border-color: #e8c15a; }
+  .inklabel { font-size: 13px; color: #b39d6b; margin-right: 2px; }
+  #table { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 6px 22px 0; }
+  .handrow { display: flex; gap: 10px; min-height: 158px; align-items: flex-end; justify-content: center; }
+  .handrow.foe { align-items: flex-start; }
+  .cardback {
+    width: 96px; height: 136px; border-radius: 10px; flex: 0 0 auto;
+    background: repeating-linear-gradient(45deg, #3a2a12 0 10px, #241a0b 10px 20px);
+    border: 2px solid #8a6d2f; display: flex; align-items: center; justify-content: center;
+    font-size: 34px; color: #c9a227; box-shadow: 0 4px 10px rgba(0,0,0,.5);
+  }
+  #mid { display: flex; gap: 16px; align-items: stretch; justify-content: center; min-height: 128px; }
+  .played { flex: 1; max-width: 560px; border: 1px dashed #6b5732; border-radius: 12px; padding: 10px 14px; background: rgba(0,0,0,.25); }
+  .played h3 { font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: #b39d6b; margin-bottom: 6px; }
+  #lastplay { font-size: 19px; color: #f3e6c8; min-height: 26px; }
+  #log { font-size: 14px; color: #cbb98a; line-height: 1.55; margin-top: 6px; max-height: 84px; overflow: hidden; }
+  #controls { display: flex; flex-direction: column; gap: 8px; align-items: stretch; width: 190px; }
+  button {
+    font-family: Georgia, serif; font-size: 16px; padding: 10px 12px; cursor: pointer;
+    color: #1a1206; background: linear-gradient(180deg, #e8c15a, #c98f1b);
+    border: 1px solid #8a6d2f; border-radius: 8px; font-weight: bold;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  button.ghost { background: transparent; color: #e8dcc0; border-color: #6b5732; }
+  #turnlabel { text-align: center; font-size: 15px; color: #ffe08a; letter-spacing: 1px; }
+  #hint { text-align: center; font-size: 13px; color: #b39d6b; }
+  .card {
+    width: 110px; height: 152px; border-radius: 10px; flex: 0 0 auto; cursor: pointer;
+    background: linear-gradient(180deg, #f7efdc, #e2d3ab); color: #241a0b; position: relative;
+    border: 2px solid #8a6d2f; box-shadow: 0 4px 12px rgba(0,0,0,.55);
+    padding: 7px; display: flex; flex-direction: column; transition: transform .12s ease;
+  }
+  .card:hover { transform: translateY(-14px); }
+  .card.unplayable { opacity: .55; cursor: not-allowed; }
+  .card.unplayable:hover { transform: none; }
+  .card .cost {
+    position: absolute; top: -9px; left: -9px; width: 30px; height: 30px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #7fb3ff, #2c5aa0); color: #fff; font-weight: bold;
+    display: flex; align-items: center; justify-content: center; border: 2px solid #dfe9ff; font-size: 16px;
+  }
+  .card .cname { font-size: 14px; font-weight: bold; text-align: center; margin-top: 10px; line-height: 1.1; min-height: 30px; }
+  .card .house { text-align: center; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #6b5732; }
+  .card .glyph { text-align: center; font-size: 30px; line-height: 1; margin: 1px 0; }
+  .card .cdesc { font-size: 12px; text-align: center; color: #4a3a1c; line-height: 1.25; flex: 1; }
+  .card .power { text-align: center; font-size: 18px; font-weight: bold; color: #8a2f1d; }
+  .card.house-ember { border-color: #b3402a; }
+  .card.house-tide { border-color: #2c5aa0; }
+  .card.house-thorn { border-color: #4a7c2f; }
+  .card.house-lantern { border-color: #a8842c; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(10, 7, 3, .97); z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center;
+  }
+  .overlay h1 { font-size: 64px; letter-spacing: 4px; color: #f3e6c8; text-shadow: 0 0 30px rgba(232,193,90,.35); }
+  .overlay h2 { font-size: 22px; color: #c9a227; font-weight: normal; font-style: italic; }
+  .overlay p { font-size: 16px; color: #cbb98a; max-width: 620px; line-height: 1.6; }
+  .overlay .big { font-size: 84px; }
+  .overlay .stats { font-size: 17px; color: #e8dcc0; line-height: 1.8; }
+  .keys { font-size: 13px; color: #8a7a52; }
+  .hidden { display: none !important; }
+  #deckcount { font-size: 13px; color: #b39d6b; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar">
+    <div class="name">Mirelle<small>Rival Scribe</small></div>
+    <div class="lifewrap">
+      <div class="lifebar"><div id="foelife" class="lifefill foe" style="width:100%"></div></div>
+      <div class="lifetext">Life <b id="foelifeText">24 / 24</b> &nbsp;<span id="foeshield" class="shield"></span></div>
+    </div>
+    <div style="flex:1"></div>
+    <div id="deckcount"></div>
+  </div>
+
+  <div id="table">
+    <div class="handrow foe" id="foehand"></div>
+    <div id="mid">
+      <div class="played">
+        <h3>Last play</h3>
+        <div id="lastplay">—</div>
+        <div id="log"></div>
+      </div>
+      <div id="controls">
+        <div id="turnlabel">Your turn</div>
+        <button id="endturn">End turn &nbsp;(Space)</button>
+        <button id="restart" class="ghost">New duel &nbsp;(R)</button>
+        <div id="hint">Keys 1–5 play a card · click a card to play it</div>
+      </div>
+    </div>
+    <div class="handrow" id="hand"></div>
+  </div>
+
+  <div class="bar">
+    <div class="name">You<small>Inkbound Duelist</small></div>
+    <div class="lifewrap">
+      <div class="lifebar"><div id="yourlife" class="lifefill you" style="width:100%"></div></div>
+      <div class="lifetext">Life <b id="yourlifeText">24 / 24</b> &nbsp;<span id="yourshield" class="shield"></span></div>
+    </div>
+    <div style="flex:1"></div>
+    <div class="inkpips" id="inkpips"><span class="inklabel">Ink</span></div>
+  </div>
+</div>
+
+<div id="title" class="overlay">
+  <h1>INKBOUND DUEL</h1>
+  <h2>A duel of living ink cards</h2>
+  <p>Two scribes. One page. Spend ink to play cards from your hand — strikes to wound,
+  wards to shield, leeches to steal life back. Reduce Mirelle to 0 life before she does the same to you.
+  First to empty the rival's inkwell wins the page.</p>
+  <button id="start" style="font-size:20px; padding: 14px 42px;">Begin the duel &nbsp;(Enter)</button>
+  <div class="keys">Mouse: click a card to play it &nbsp;·&nbsp; Keyboard: 1–5 play · Space end turn · R new duel</div>
+</div>
+
+<div id="end" class="overlay hidden">
+  <div class="big" id="endglyph">✒</div>
+  <h1 id="endtitle">VICTORY</h1>
+  <h2 id="endsub"></h2>
+  <div class="stats" id="endstats"></div>
+  <button id="again" style="font-size:20px; padding: 14px 42px;">Duel again &nbsp;(R)</button>
+</div>
+
+<script>
+'use strict';
+// ---- Inkbound Duel: original card duel. You vs Mirelle, 24 life each. ----
+
+const HOUSES = {
+  ember:   { glyph: '◆', color: '#b3402a', label: 'Ember' },
+  tide:    { glyph: '●', color: '#2c5aa0', label: 'Tide' },
+  thorn:   { glyph: '▲', color: '#4a7c2f', label: 'Thorn' },
+  lantern: { glyph: '■', color: '#a8842c', label: 'Lantern' },
+};
+
+// name, house, cost, kind, value, text
+const DECK_DEF = [
+  ['Quill Strike',  'ember',   1, 'strike', 3, 'Deal 3 damage.'],
+  ['Quill Strike',  'ember',   1, 'strike', 3, 'Deal 3 damage.'],
+  ['Quill Strike',  'ember',   1, 'strike', 3, 'Deal 3 damage.'],
+  ['Ink Bolt',      'tide',    2, 'strike', 5, 'Deal 5 damage.'],
+  ['Ink Bolt',      'tide',    2, 'strike', 5, 'Deal 5 damage.'],
+  ['Thorn Lash',    'thorn',   2, 'strike', 4, 'Deal 4 damage.'],
+  ['Thorn Lash',    'thorn',   2, 'strike', 4, 'Deal 4 damage.'],
+  ['Lantern Flare', 'lantern', 3, 'strike', 7, 'Deal 7 damage.'],
+  ['Lantern Flare', 'lantern', 3, 'strike', 7, 'Deal 7 damage.'],
+  ['Ember Crash',   'ember',   4, 'strike', 9, 'Deal 9 damage.'],
+  ['Paper Ward',    'lantern', 1, 'ward',   4, 'Gain 4 shield.'],
+  ['Paper Ward',    'lantern', 1, 'ward',   4, 'Gain 4 shield.'],
+  ['Tide Ward',     'tide',    2, 'ward',   7, 'Gain 7 shield.'],
+  ['Tide Ward',     'tide',    2, 'ward',   7, 'Gain 7 shield.'],
+  ['Thorn Wall',    'thorn',   3, 'ward',  10, 'Gain 10 shield.'],
+  ['Leech Quill',   'ember',   2, 'leech',  3, 'Deal 3, heal 3.'],
+  ['Leech Quill',   'ember',   2, 'leech',  3, 'Deal 3, heal 3.'],
+  ['Deep Leech',    'tide',    3, 'leech',  5, 'Deal 5, heal 5.'],
+  ['Deep Leech',    'tide',    3, 'leech',  5, 'Deal 5, heal 5.'],
+  ['Ink Surge',     'lantern', 1, 'surge',  2, 'Draw 2 cards.'],
+  ['Ink Surge',     'lantern', 1, 'surge',  2, 'Draw 2 cards.'],
+  ['Thorn Bloom',   'thorn',   2, 'surge',  1, 'Draw 1, gain 2 ink.'],
+  ['Thorn Bloom',   'thorn',   2, 'surge',  1, 'Draw 1, gain 2 ink.'],
+  ['Grand Sigil',   'lantern', 5, 'strike', 12, 'Deal 12 damage.'],
+];
+
+const MAX_LIFE = 24, MAX_INK = 8, HAND_SIZE = 5;
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function makeDeck() { return shuffle(DECK_DEF.map((d, i) => ({ id: i, name: d[0], house: d[1], cost: d[2], kind: d[3], value: d[4], text: d[5] }))); }
+
+let S; // game state
+
+function newGame() {
+  S = {
+    over: false, yourTurn: true, turn: 1, dealt: 0, played: 0,
+    you:  { life: MAX_LIFE, shield: 0, ink: 2, maxInk: 2, deck: makeDeck(), hand: [] },
+    foe:  { life: MAX_LIFE, shield: 0, ink: 2, maxInk: 2, deck: makeDeck(), hand: [] },
+    logLines: [],
+  };
+  drawCards(S.you, HAND_SIZE);
+  drawCards(S.foe, HAND_SIZE);
+  say('The page is blank. The duel begins — your move.');
+  $('end').classList.add('hidden');
+  $('title').classList.add('hidden');
+  render();
+}
+
+function drawCards(p, n) {
+  for (let i = 0; i < n; i++) {
+    if (!p.deck.length) p.deck = makeDeck(); // reshuffle the discard pile
+    if (p.hand.length < 7) p.hand.push(p.deck.pop());
+  }
+}
+
+function say(msg) {
+  S.logLines.unshift(msg);
+  S.logLines = S.logLines.slice(0, 4);
+  $('log').innerHTML = S.logLines.map(l => '· ' + l).join('<br>');
+}
+
+function damage(target, amount) {
+  let rest = amount;
+  if (target.shield > 0) {
+    const blocked = Math.min(target.shield, rest);
+    target.shield -= blocked; rest -= blocked;
+  }
+  target.life = Math.max(0, target.life - rest);
+  return rest;
+}
+
+function playCard(side, idx) {
+  const me = S[side], other = S[side === 'you' ? 'foe' : 'you'];
+  const card = me.hand[idx];
+  if (!card || me.ink < card.cost || S.over) return false;
+  me.ink -= card.cost;
+  me.hand.splice(idx, 1);
+  S.played++;
+  const who = side === 'you' ? 'You' : 'Mirelle';
+  let line = '';
+  if (card.kind === 'strike') {
+    const dealt = damage(other, card.value); S.dealt += side === 'you' ? dealt : 0;
+    line = `${who} played ${card.name} — ${dealt} damage.`;
+  } else if (card.kind === 'ward') {
+    me.shield += card.value;
+    line = `${who} played ${card.name} — +${card.value} shield.`;
+  } else if (card.kind === 'leech') {
+    const dealt = damage(other, card.value); S.dealt += side === 'you' ? dealt : 0;
+    me.life = Math.min(MAX_LIFE, me.life + card.value);
+    line = `${who} played ${card.name} — ${dealt} damage, healed ${card.value}.`;
+  } else if (card.kind === 'surge') {
+    drawCards(me, card.value);
+    if (card.name === 'Thorn Bloom') me.ink = Math.min(MAX_INK, me.ink + 2);
+    line = `${who} played ${card.name} — drew ${card.value} card${card.value > 1 ? 's' : ''}.`;
+  }
+  $('lastplay').textContent = line;
+  say(line);
+  render();
+  checkEnd();
+  return true;
+}
+
+function checkEnd() {
+  if (S.over) return;
+  if (S.foe.life <= 0 || S.you.life <= 0) {
+    S.over = true;
+    const won = S.foe.life <= 0 && S.you.life > 0;
+    $('endglyph').textContent = won ? '✒' : '☠';
+    $('endtitle').textContent = won ? 'VICTORY' : 'DEFEAT';
+    $('endtitle').style.color = won ? '#ffe08a' : '#e74c3c';
+    $('endsub').textContent = won
+      ? 'Mirelle\'s ink runs dry. The page is yours.'
+      : 'Mirelle signs the page. Your ink is spent.';
+    $('endstats').innerHTML =
+      `Turns: ${S.turn} &nbsp;·&nbsp; Cards played: ${S.played} &nbsp;·&nbsp; Damage dealt: ${S.dealt}<br>` +
+      `Your life: ${S.you.life} / ${MAX_LIFE} &nbsp;·&nbsp; Mirelle's life: ${S.foe.life} / ${MAX_LIFE}`;
+    $('end').classList.remove('hidden');
+    render();
+  }
+}
+
+function endTurn() {
+  if (S.over || !S.yourTurn) return;
+  S.yourTurn = false;
+  $('turnlabel').textContent = 'Mirelle thinks…';
+  render();
+  setTimeout(aiTurn, 650);
+}
+
+function aiTurn() {
+  if (S.over) return;
+  const foe = S.foe;
+  foe.maxInk = Math.min(MAX_INK, foe.maxInk + 1);
+  foe.ink = foe.maxInk;
+  drawCards(foe, 1);
+  // Simple rival: play affordable cards, favouring lethal strikes, then wards when hurt.
+  let guard = 0;
+  while (guard++ < 8) {
+    const affordable = foe.hand.map((c, i) => ({ c, i })).filter(x => x.c.cost <= foe.ink);
+    if (!affordable.length) break;
+    let pick = affordable[0];
+    const lethal = affordable.find(x => x.c.kind === 'strike' && x.c.value >= S.you.life + S.you.shield);
+    if (lethal) pick = lethal;
+    else if (foe.life <= 10) {
+      const ward = affordable.find(x => x.c.kind === 'ward');
+      if (ward) pick = ward;
+    }
+    if (!playCard('foe', pick.i)) break;
+    if (S.over) return;
+  }
+  S.turn++;
+  S.yourTurn = true;
+  const you = S.you;
+  you.maxInk = Math.min(MAX_INK, you.maxInk + 1);
+  you.ink = you.maxInk;
+  drawCards(you, 1);
+  $('turnlabel').textContent = 'Your turn — turn ' + S.turn;
+  say('Turn ' + S.turn + '. You draw a card and gain ink.');
+  render();
+}
+
+function cardEl(card, idx, playable) {
+  const h = HOUSES[card.house];
+  const el = document.createElement('div');
+  el.className = 'card house-' + card.house + (playable ? '' : ' unplayable');
+  el.innerHTML =
+    `<div class="cost">${card.cost}</div>` +
+    `<div class="cname">${card.name}</div>` +
+    `<div class="house">${h.label} · ${card.kind}</div>` +
+    `<div class="glyph" style="color:${h.color}">${h.glyph}</div>` +
+    `<div class="cdesc">${card.text}</div>` +
+    `<div class="power">${card.kind === 'ward' ? '+' + card.value + ' shield' : card.kind === 'surge' ? 'draw ' + card.value : card.value + ' dmg'}</div>`;
+  el.title = card.name + ' — ' + card.text + ' (cost ' + card.cost + ' ink)';
+  el.addEventListener('click', () => {
+    if (!S.yourTurn || S.over) return;
+    if (!playCard('you', idx)) say('Not enough ink for ' + card.name + '.');
+  });
+  return el;
+}
+
+function render() {
+  $('yourlife').style.width = (100 * S.you.life / MAX_LIFE) + '%';
+  $('foelife').style.width = (100 * S.foe.life / MAX_LIFE) + '%';
+  $('yourlifeText').textContent = S.you.life + ' / ' + MAX_LIFE;
+  $('foelifeText').textContent = S.foe.life + ' / ' + MAX_LIFE;
+  $('yourshield').textContent = S.you.shield ? '🛡 ' + S.you.shield + ' shield' : '';
+  $('foeshield').textContent = S.foe.shield ? '🛡 ' + S.foe.shield + ' shield' : '';
+  $('deckcount').textContent = 'Deck: ' + S.you.deck.length + ' cards · Turn ' + S.turn;
+
+  const pips = $('inkpips');
+  pips.innerHTML = '<span class="inklabel">Ink</span>';
+  for (let i = 0; i < MAX_INK; i++) {
+    const p = document.createElement('span');
+    p.className = 'pip' + (i < S.you.ink ? ' full' : '');
+    pips.appendChild(p);
+  }
+  const pipLabel = document.createElement('span');
+  pipLabel.className = 'inklabel';
+  pipLabel.textContent = S.you.ink + ' / ' + MAX_INK;
+  pips.appendChild(pipLabel);
+
+  const hand = $('hand');
+  hand.innerHTML = '';
+  S.you.hand.forEach((c, i) => hand.appendChild(cardEl(c, i, S.yourTurn && !S.over && c.cost <= S.you.ink)));
+
+  const foe = $('foehand');
+  foe.innerHTML = '';
+  S.foe.hand.forEach(() => {
+    const b = document.createElement('div');
+    b.className = 'cardback';
+    b.textContent = '✒';
+    foe.appendChild(b);
+  });
+  $('endturn').disabled = !S.yourTurn || S.over;
+  if (!S.over) $('turnlabel').textContent = S.yourTurn ? 'Your turn — turn ' + S.turn : 'Mirelle thinks…';
+}
+
+$('start').addEventListener('click', newGame);
+$('again').addEventListener('click', newGame);
+$('restart').addEventListener('click', newGame);
+$('endturn').addEventListener('click', endTurn);
+
+document.addEventListener('keydown', e => {
+  if (!$('title').classList.contains('hidden') && (e.key === 'Enter' || e.key === ' ')) { newGame(); return; }
+  if (!$('end').classList.contains('hidden') && (e.key === 'r' || e.key === 'R' || e.key === 'Enter')) { newGame(); return; }
+  if (S && !S.over && S.yourTurn) {
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); endTurn(); }
+    else if (e.key >= '1' && e.key <= '9') {
+      const i = Number(e.key) - 1;
+      if (S.you.hand[i]) playCard('you', i);
+    } else if (e.key === 'r' || e.key === 'R') newGame();
+  }
+});
+
+// Screenshot presets: ?shot=title | game | win | loss — real renders of this same code.
+const shot = params.get('shot');
+if (shot === 'title') {
+  // Title screen over a fresh table: leave the title overlay up.
+} else if (shot === 'game' || shot === 'win' || shot === 'loss') {
+  newGame();
+  // Play a few scripted moves so the table looks lived-in.
+  S.you.ink = 8; S.foe.ink = 8;
+  playCard('you', 0);
+  if (!S.over) playCard('foe', 0);
+  if (!S.over) { S.you.ink = 8; playCard('you', 0); }
+  if (shot === 'win') { S.foe.life = 0; checkEnd(); }
+  if (shot === 'loss') { S.you.life = 0; checkEnd(); }
+  render();
+}
+</script>
+</body>
+</html>
